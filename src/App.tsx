@@ -263,7 +263,7 @@ function GamePhaseView({ roomId, room, uid, secretNumber, isHost, busy, setNotic
   return <section className="panel result-panel">
     {!results ? <div className="center-state compact"><div className="loader" /><h2>みんなの数字を集めています…</h2><p>各プレイヤーの画面から安全に答えを公開中です。</p></div> : <>
       <div className={`result-badge ${results.success ? 'success' : 'miss'}`}>{results.success ? 'PERFECT!' : '惜しい！'}</div>
-      <h2>{results.success ? 'みんなの感覚がぴったり！' : '答えはこちら'}</h2><p className="score"><strong>{results.exact}</strong> / {ids.length} 人が正しい位置</p>
+      <h2>{results.success ? 'みんなの感覚がぴったり！' : 'みんなが決めた順番'}</h2><p className="score"><strong>{results.exact}</strong> / {ids.length} 人が正しい位置</p>
       <ol className="answer-list">{results.entries.map((entry, index) => <li key={entry.uid} className={entry.guessedIndex === entry.actualIndex ? 'correct' : ''}><span>{index + 1}</span><strong>{entry.name}</strong><b>{entry.number}</b>{entry.guessedIndex === entry.actualIndex && <Check size={18} />}</li>)}</ol>
       {isHost ? <button className="primary-button sticky-action" disabled={busy} onClick={() => void run(() => startRound(roomId, room, uid))}><RotateCcw /> 次のラウンド</button> : <p className="host-wait">ホストが次のラウンドへ進めます</p>}
     </>}

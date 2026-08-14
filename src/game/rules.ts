@@ -18,12 +18,12 @@ export function calculateResults(room: Room): { entries: ResultEntry[]; exact: n
   const reveals = room.reveals ?? {}
   if (!guess.length || guess.some((uid) => reveals[uid] == null)) return null
   const actual = [...guess].sort((a, b) => reveals[b] - reveals[a])
-  const entries = actual.map((uid, actualIndex) => ({
+  const entries = guess.map((uid, guessedIndex) => ({
     uid,
     name: room.players[uid]?.name ?? '退出したプレイヤー',
     number: reveals[uid],
-    guessedIndex: guess.indexOf(uid),
-    actualIndex,
+    guessedIndex,
+    actualIndex: actual.indexOf(uid),
   }))
   const exact = entries.filter((entry) => entry.guessedIndex === entry.actualIndex).length
   return { entries, exact, success: exact === guess.length }
