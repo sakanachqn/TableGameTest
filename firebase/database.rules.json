@@ -1,0 +1,72 @@
+﻿{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "rooms": {
+      "$roomId": {
+        ".read": "auth != null && data.child('players').child(auth.uid).exists()",
+        "meta": {
+          ".read": "auth != null",
+          ".write": "auth != null && ((!data.exists() && newData.child('hostUid').val() === auth.uid) || data.child('hostUid').val() === auth.uid)",
+          ".validate": "newData.hasChildren(['hostUid', 'phase', 'round', 'theme', 'createdAt', 'maxPlayers']) && newData.child('hostUid').isString() && newData.child('phase').isString() && (newData.child('phase').val() === 'lobby' || newData.child('phase').val() === 'reveal' || newData.child('phase').val() === 'discussion' || newData.child('phase').val() === 'ordering' || newData.child('phase').val() === 'result') && newData.child('round').isNumber() && newData.child('round').val() >= 0 && newData.child('maxPlayers').val() === 10"
+        },
+        "players": {
+          ".read": "auth != null && data.child(auth.uid).exists()",
+          "$uid": {
+            ".read": "auth != null && (auth.uid === $uid || data.parent().child(auth.uid).exists())",
+            "name": {
+              ".write": "auth != null && auth.uid === $uid",
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 16"
+            },
+            "joinedAt": {
+              ".write": "auth != null && auth.uid === $uid && (!data.exists() || data.val() === newData.val())",
+              ".validate": "newData.isNumber()"
+            },
+            "connected": {
+              ".write": "auth != null && auth.uid === $uid",
+              ".validate": "newData.isBoolean()"
+            },
+            "ready": {
+              ".write": "auth != null && (auth.uid === $uid || root.child('rooms').child($roomId).child('meta').child('hostUid').val() === auth.uid)",
+              ".validate": "newData.isBoolean()"
+            },
+            "hint": {
+              ".write": "auth != null && (auth.uid === $uid || root.child('rooms').child($roomId).child('meta').child('hostUid').val() === auth.uid)",
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40"
+            },
+            "eligibleFromRound": {
+              ".write": "auth != null && auth.uid === $uid && (!data.exists() || data.val() === newData.val())",
+              ".validate": "newData.isNumber() && newData.val() >= 1"
+            },
+            "$other": { ".validate": false }
+          }
+        },
+        "order": {
+          ".read": "auth != null && root.child('rooms').child($roomId).child('players').child(auth.uid).exists()",
+          ".write": "auth != null && root.child('rooms').child($roomId).child('meta').child('hostUid').val() === auth.uid"
+        },
+        "reveals": {
+          ".read": "auth != null && root.child('rooms').child($roomId).child('players').child(auth.uid).exists() && root.child('rooms').child($roomId).child('meta').child('phase').val() === 'result'",
+          ".write": "auth != null && root.child('rooms').child($roomId).child('meta').child('hostUid').val() === auth.uid && !newData.exists()",
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && root.child('rooms').child($roomId).child('meta').child('phase').val() === 'result'",
+            ".validate": "newData.isNumber() && newData.val() === root.child('roomSecrets').child($roomId).child($uid).child('number').val()"
+          }
+        },
+        "$other": { ".validate": false }
+      }
+    },
+    "roomSecrets": {
+      "$roomId": {
+        ".write": "auth != null && root.child('rooms').child($roomId).child('meta').child('hostUid').val() === auth.uid",
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid && root.child('rooms').child($roomId).child('players').child(auth.uid).exists()",
+          "number": {
+            ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 100"
+          },
+          "$other": { ".validate": false }
+        }
+      }
+    }
+  }
+}
