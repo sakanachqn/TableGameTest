@@ -5,7 +5,7 @@ import {
 import { auth, database } from '../firebase/config'
 import { randomTopic } from '../data/topics'
 import { activePlayerIds, orderedIds } from '../game/rules'
-import type { GamePhase, Room } from '../types/game'
+import type { GamePhase, GameType, Room } from '../types/game'
 
 const ROOM_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 const MAX_PLAYERS = 10
@@ -32,7 +32,7 @@ async function generateRoomId(): Promise<string> {
   throw new Error('部屋コードを作れませんでした。もう一度お試しください。')
 }
 
-export async function createRoom(name: string): Promise<string> {
+export async function createRoom(name: string, gameType: GameType = 'number-order', spectrumTurnsPerPlayer: 1 | 2 = 1): Promise<string> {
   const safeName = cleanName(name)
   if (!safeName) throw new Error('ニックネームを入力してください。')
   const user = await ensureAnonymousUser()
@@ -46,6 +46,8 @@ export async function createRoom(name: string): Promise<string> {
       theme: '',
       createdAt: now,
       maxPlayers: MAX_PLAYERS,
+      gameType,
+      spectrumTurnsPerPlayer,
     },
     [`rooms/${roomId}/players/${user.uid}/name`]: safeName,
     [`rooms/${roomId}/players/${user.uid}/joinedAt`]: now,

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowDown, ArrowUp, Check, ChevronRight, CircleHelp, Copy, DoorOpen, Gauge, LogOut, Play, RotateCcw, Users,
+  ArrowDown, ArrowUp, Check, ChevronRight, CircleHelp, Copy, DoorOpen, Gauge, ListOrdered, LogOut, Play, RotateCcw, Target, Users,
 } from 'lucide-react'
 import { isFirebaseConfigured } from './firebase/config'
 import { useGameRoom } from './hooks/useGameRoom'
@@ -12,7 +12,8 @@ import {
 import { PlayerList } from './components/PlayerList'
 import { SortableOrder } from './components/SortableOrder'
 import { AudioControls } from './components/AudioControls'
-import type { Room } from './types/game'
+import type { GameType, Room } from './types/game'
+import { SpectrumGame } from './games/spectrum/SpectrumGame'
 import {
   installGlobalButtonSounds, playOrderingStartSound, playResultSound, playTopicSound, startBgm, stopBgm,
 } from './services/soundService'
@@ -23,7 +24,10 @@ function roomIdFromPath(): string {
 }
 
 function phaseLabel(phase: Room['meta']['phase']): string {
-  return { lobby: 'ロビー', reveal: '数字確認', discussion: '相談タイム', ordering: '並べ替え', result: '答え合わせ' }[phase]
+  return {
+    lobby: 'ロビー', reveal: '数字確認', discussion: '相談タイム', ordering: '並べ替え', result: '答え合わせ',
+    psychicReveal: '秘密確認', clue: 'ヒント作成', guessing: '個人予想', gameEnd: '最終結果',
+  }[phase]
 }
 
 export default function App() {
@@ -32,6 +36,8 @@ export default function App() {
   const [name, setName] = useState('')
   const [roomInput, setRoomInput] = useState(pathRoomId)
   const [homeMode, setHomeMode] = useState<'choice' | 'create' | 'join'>(pathRoomId ? 'join' : 'choice')
+  const [selectedGameType, setSelectedGameType] = useState<GameType>('number-order')
+  const [spectrumTurns, setSpectrumTurns] = useState<1 | 2>(1)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [revealRetry, setRevealRetry] = useState(0)
@@ -119,9 +125,9 @@ export default function App() {
       <main className="home-shell">
         <div className="home-audio-controls"><AudioControls /></div>
         <div className="brand-mark" aria-hidden="true"><Gauge size={38} /></div>
-        <p className="eyebrow">ことばで合わせる、心の目盛り</p>
+        <p className="eyebrow">ことばで合わせる、みんなの感覚</p>
         <h1>ココロ<span>メーター</span></h1>
-        <p className="lead">秘密の数字をことばに変えて。みんなの感覚を、低い順にぴたりと並べよう。</p>
+        <p className="lead">ことばから感覚を読み取って、みんなで盛り上がる2つのパーティーゲーム。</p>
 
         {!isFirebaseConfigured && (
           <div className="setup-notice" role="status">
@@ -143,12 +149,28 @@ export default function App() {
           <form className="join-card" onSubmit={(event) => {
             event.preventDefault()
             void run(async () => {
-              const id = homeMode === 'create' ? await createRoom(name) : await joinRoom(roomInput, name)
+              const id = homeMode === 'create' ? await createRoom(name, selectedGameType, spectrumTurns) : await joinRoom(roomInput, name)
               openRoom(id)
             })
           }}>
             <button className="text-button" type="button" onClick={() => setHomeMode('choice')}>← 戻る</button>
             <h2>{homeMode === 'create' ? '新しい部屋を作る' : '部屋に参加する'}</h2>
+            {homeMode === 'create' && <>
+              <fieldset className="game-type-picker">
+                <legend>遊ぶゲーム</legend>
+                <button type="button" className={selectedGameType === 'number-order' ? 'selected' : ''} onClick={() => setSelectedGameType('number-order')}>
+                  <ListOrdered /><span><strong>ナンバーライン</strong><small>ことばを頼りに順番を当てる協力戦</small></span>
+                </button>
+                <button type="button" className={selectedGameType === 'spectrum' ? 'selected' : ''} onClick={() => setSelectedGameType('spectrum')}>
+                  <Target /><span><strong>フィーリングレンジ</strong><small>秘密の位置を当てる個人戦</small></span>
+                </button>
+              </fieldset>
+              {selectedGameType === 'spectrum' && <fieldset className="turn-picker">
+                <legend>1人あたりの出題回数</legend>
+                <button type="button" className={spectrumTurns === 1 ? 'selected' : ''} onClick={() => setSpectrumTurns(1)}>1回 <small>さくっと</small></button>
+                <button type="button" className={spectrumTurns === 2 ? 'selected' : ''} onClick={() => setSpectrumTurns(2)}>2回 <small>じっくり</small></button>
+              </fieldset>}
+            </>}
             {homeMode === 'join' && (
               <label>Room ID<input value={roomInput} onChange={(event) => setRoomInput(normalizeRoomId(event.target.value))} placeholder="ABCD" autoCapitalize="characters" maxLength={6} /></label>
             )}
@@ -158,7 +180,7 @@ export default function App() {
             </button>
           </form>
         )}
-        <section className="howto"><span>1</span> 数字を見る <ArrowDown /><span>2</span> ことばで表す <ArrowDown /><span>3</span> 順番を当てる</section>
+        <section className="howto"><span>1</span> 部屋を作る <ArrowDown /><span>2</span> ゲームを選ぶ <ArrowDown /><span>3</span> 友達と遊ぶ</section>
         <footer className="sound-credit">効果音素材：OtoLogic</footer>
       </main>
     )
@@ -171,6 +193,7 @@ export default function App() {
   const me = room.players[uid]
   const isActive = Boolean(me && me.eligibleFromRound <= room.meta.round && orderedIds(room.order).includes(uid))
   const hostOffline = !room.players[room.meta.hostUid]?.connected
+  const gameType = room.meta.gameType ?? 'number-order'
 
   return (
     <main className="game-shell">
@@ -184,13 +207,15 @@ export default function App() {
       </header>
       {error && <div className="error-box" role="alert">{error}</div>}
       {hostOffline && <div className="warning-box">ホストが退出しました。再接続を待っています。</div>}
-      {room.meta.phase !== 'lobby' && !isActive ? (
+      {gameType === 'spectrum' ? (
+        <SpectrumGame roomId={joinedRoomId} room={room} uid={uid} isHost={isHost} busy={busy} debug={debug} setNotice={setNotice} run={run} />
+      ) : room.meta.phase !== 'lobby' && !isActive ? (
         <section className="panel waiting-panel"><div className="big-icon"><Users /></div><h2>次のラウンドから参加！</h2><p>いまのゲームを見守りながら、みんなの会話を楽しんでください。</p><PlayerList room={room} currentUid={uid} /></section>
       ) : (
         <GamePhaseView roomId={joinedRoomId} room={room} uid={uid} secretNumber={secretNumber} isHost={isHost} busy={busy} setNotice={setNotice} run={run} />
       )}
       {notice && <div className="toast" role="status" onAnimationEnd={() => setNotice(null)}>{notice}</div>}
-      {debug && <aside className="debug-panel">phase: {room.meta.phase}<br />uid: {uid}<br />host: {room.meta.hostUid}<br />room: {joinedRoomId}<br />connected: {me?.connected ? 'yes' : 'no'}</aside>}
+      {debug && <aside className="debug-panel">game: {gameType}<br />phase: {room.meta.phase}<br />round: {room.meta.round}{room.spectrum ? ` / ${room.spectrum.maxRounds}` : ''}<br />uid: {uid}<br />host: {room.meta.hostUid}<br />psychic: {room.spectrum?.psychicUid ?? '-'}<br />room: {joinedRoomId}<br />connected: {me?.connected ? 'yes' : 'no'}<br />revealed: {JSON.stringify(room.spectrum?.revealedGuesses ?? {})}<br />scores: {JSON.stringify(room.spectrum?.scores ?? {})}</aside>}
     </main>
   )
 }
