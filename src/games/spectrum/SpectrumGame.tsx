@@ -117,29 +117,42 @@ export function SpectrumGame({ roomId, room, uid, isHost, busy, debug, setNotice
   const [ownGuess, setOwnGuess] = useState<OwnSpectrumGuess | null>(null)
   const [guessPosition, setGuessPosition] = useState(50)
   const [clue, setClue] = useState('')
+  const [, setAutomationRetry] = useState(0)
+  const automatedActions = useRef(new Set<string>())
+  const publishedValues = useRef(new Set<string>())
   const phase = room.meta.phase
   const isPsychic = state?.psychicUid === uid
   const psychicOffline = Boolean(state && !room.players[state.psychicUid]?.connected)
+  const stateRound = state?.round
+
+  const runOnce = (guard: Set<string>, key: string, action: () => Promise<void>) => {
+    if (guard.has(key)) return
+    guard.add(key)
+    void action().catch(() => {
+      guard.delete(key)
+      window.setTimeout(() => setAutomationRetry((value) => value + 1), 600)
+    })
+  }
 
   useEffect(() => {
-    if (!state || !isPsychic) {
+    if (stateRound == null || !isPsychic) {
       setTarget(null)
       return
     }
-    return subscribeSpectrumTarget(roomId, uid, state.round, setTarget)
-  }, [isPsychic, roomId, state, uid])
+    return subscribeSpectrumTarget(roomId, uid, stateRound, setTarget)
+  }, [isPsychic, roomId, stateRound, uid])
 
   useEffect(() => {
-    if (!state || isPsychic) {
+    if (stateRound == null || isPsychic) {
       setOwnGuess(null)
       setGuessPosition(50)
       return
     }
-    return subscribeOwnSpectrumGuess(roomId, uid, state.round, (guess) => {
+    return subscribeOwnSpectrumGuess(roomId, uid, stateRound, (guess) => {
       setOwnGuess(guess)
       setGuessPosition(guess?.position ?? 50)
     })
-  }, [isPsychic, roomId, state, uid])
+  }, [isPsychic, roomId, stateRound, uid])
 
   useEffect(() => {
     if (phase === 'psychicReveal') playTopicSound()
@@ -151,19 +164,20 @@ export function SpectrumGame({ roomId, room, uid, isHost, busy, debug, setNotice
 
   useEffect(() => {
     if (!isHost || !state || psychicOffline) return
+    const roundKey = `${state.round}:${state.topic.id}`
     if (phase === 'psychicReveal' && state.psychicReady) {
-      void setSpectrumPhase(roomId, room, uid, 'clue')
+      runOnce(automatedActions.current, `clue:${roundKey}`, () => setSpectrumPhase(roomId, room, uid, 'clue'))
     } else if (phase === 'clue' && state.clue) {
-      void setSpectrumPhase(roomId, room, uid, 'guessing')
+      runOnce(automatedActions.current, `guessing:${roundKey}`, () => setSpectrumPhase(roomId, room, uid, 'guessing'))
     } else if (phase === 'guessing') {
       const guessers = spectrumGuessers(room)
       if (guessers.length > 0 && guessers.every((playerUid) => state.guessStatus?.[playerUid])) {
-        void setSpectrumPhase(roomId, room, uid, 'result')
+        runOnce(automatedActions.current, `result:${roundKey}`, () => setSpectrumPhase(roomId, room, uid, 'result'))
       }
     } else if (phase === 'result' && state.revealedTargetPosition != null) {
       const guessers = spectrumGuessers(room)
       if (guessers.every((playerUid) => state.revealedGuesses?.[playerUid] != null)) {
-        void settleSpectrumRound(roomId, room, uid)
+        runOnce(automatedActions.current, `settle:${roundKey}`, () => settleSpectrumRound(roomId, room, uid))
       }
     }
   }, [isHost, phase, psychicOffline, room, roomId, state, uid])
@@ -171,10 +185,18 @@ export function SpectrumGame({ roomId, room, uid, isHost, busy, debug, setNotice
   useEffect(() => {
     if (!state || phase !== 'result') return
     if (isPsychic && target != null && state.revealedTargetPosition !== target) {
-      void revealSpectrumTarget(roomId, target)
+      runOnce(
+        publishedValues.current,
+        `target:${state.round}:${state.topic.id}:${target}`,
+        () => revealSpectrumTarget(roomId, target),
+      )
     }
     if (!isPsychic && ownGuess?.locked && state.revealedGuesses?.[uid] !== ownGuess.position) {
-      void revealSpectrumGuess(roomId, uid, ownGuess.position)
+      runOnce(
+        publishedValues.current,
+        `guess:${state.round}:${state.topic.id}:${uid}:${ownGuess.position}`,
+        () => revealSpectrumGuess(roomId, uid, ownGuess.position),
+      )
     }
   }, [isPsychic, ownGuess, phase, roomId, state, target, uid])
 

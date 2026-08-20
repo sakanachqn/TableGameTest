@@ -141,7 +141,7 @@ export async function settleSpectrumRound(roomId: string, room: Room, uid: strin
       lastAverageDistance: Math.round(averageDistance * 10) / 10,
       lastSettledRound: current.round,
     }
-  })
+  }, { applyLocally: false })
 }
 
 function nextUsedTopics(state: SpectrumGameState): Record<string, boolean> {
